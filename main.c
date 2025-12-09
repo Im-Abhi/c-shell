@@ -4,6 +4,7 @@
 #include <unistd.h> // Required for fork() and execv()
 #include <sys/wait.h> // Required for waitpid()
 
+#include "builtin.h"
 #include "./lib/linenoise.h"
 
 char PROMPT[8192];
@@ -14,12 +15,6 @@ char PROMPT[8192];
 #define PATH_MAX 4096
 
 char CWD[PATH_MAX];
-
-typedef enum Builtin {
-    CD,
-    PWD,
-    INVALID
-} Builtin;
 
 void refresh_prompt(void) {
     snprintf(PROMPT, sizeof(PROMPT),
@@ -33,46 +28,6 @@ void refresh_cwd(void) {
     }
 
     refresh_prompt();
-}
-
-void Builtin_impl_cd(char **args, size_t n_args) {
-    char *new_dir = *args;
-    if(chdir(new_dir) != 0) {
-        fprintf(stderr, "Could not change directory to '%s'\n", new_dir);
-        exit(1);
-    }
-
-    refresh_cwd();
-}
-
-void Builtin_impl_pwd(char **args, size_t n_args) {
-    fprintf(stdout, "%s\n", CWD);
-}
-
-void (*BUILTIN_TABLE[]) (char **args, size_t n_args) = {
-    [CD] = Builtin_impl_cd,
-    [PWD] = Builtin_impl_pwd
-};
-
-Builtin builtin_code(char *cmd) {
-    if (strcmp(cmd, "cd") == 0) {
-        return CD;
-    } else if (strcmp(cmd, "pwd") == 0) {
-        return PWD;
-    } else {
-        return INVALID;
-    }
-}
-
-int is_builtin(char *cmd) {
-    return builtin_code(cmd) != INVALID;
-}
-
-// from command to builtin code command
-// BUILTIN_TABLE[builtin_code(cmd)] -> function pointer
-// use the function pointer with arguments args, n_args
-void s_execute_builtin(char *cmd, char **args, size_t n_args) {
-    BUILTIN_TABLE[builtin_code(cmd)](args, n_args);
 }
 
 // tokenization method from glibc
