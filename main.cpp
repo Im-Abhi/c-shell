@@ -6,12 +6,76 @@
 
 #include "./lib/linenoise.h"
 
-#define PROMPT "$ "
+char PROMPT[8192];
+
 #define HISTORY_LENGTH 1024
 #define MAX_ARGS 64
 #define TOKEN_SEP " \t"
+#define PATH_MAX 4096
+
+char CWD[PATH_MAX];
 
 using namespace std;
+
+typedef enum Builtin {
+    CD,
+    PWD,
+    INVALID
+} Builtin;
+
+void refresh_prompt(void) {
+    snprintf(PROMPT, sizeof(PROMPT),
+             "\033[32m%s\033[0m$ ", CWD);
+}
+
+void refresh_cwd(void) {
+    if (getcwd(CWD, sizeof(CWD)) == NULL) {
+        fprintf(stderr,"Error: could not read working directory");
+        exit(1);
+    }
+
+    refresh_prompt();
+}
+
+void Builtin_impl_cd(char **args, size_t n_args) {
+    char *new_dir = *args;
+    if(chdir(new_dir) != 0) {
+        fprintf(stderr, "Could not change directory to '%s'\n", new_dir);
+        exit(1);
+    }
+
+    refresh_cwd();
+}
+
+void Builtin_impl_pwd(char **args, size_t n_args) {
+    fprintf(stdout, "%s\n", CWD);
+}
+
+void (*BUILTIN_TABLE[]) (char **args, size_t n_args) = {
+    [CD] = Builtin_impl_cd,
+    [PWD] = Builtin_impl_pwd
+};
+
+Builtin builtin_code(char *cmd) {
+    if (strcmp(cmd, "cd") == 0) {
+        return CD;
+    } else if (strcmp(cmd, "pwd") == 0) {
+        return PWD;
+    } else {
+        return INVALID;
+    }
+}
+
+int is_builtin(char *cmd) {
+    return builtin_code(cmd) != INVALID;
+}
+
+// from command to builtin code command
+// BUILTIN_TABLE[builtin_code(cmd)] -> function pointer
+// use the function pointer with arguments args, n_args
+void s_execute_builtin(char *cmd, char **args, size_t n_args) {
+    BUILTIN_TABLE[builtin_code(cmd)](args, n_args);
+}
 
 // tokenization method from glibc
 int s_read(char *input, char **args, int max_args) {
@@ -53,6 +117,8 @@ int s_execute(char *cmd, char ** cmd_args) {
 }
 
 int main(void) {
+    refresh_cwd();
+
     if(!linenoiseHistorySetMaxLen(HISTORY_LENGTH)) {
         fprintf(stderr, "Could not set linenoise history!");
         exit(1);
@@ -78,16 +144,19 @@ int main(void) {
             continue;
         }
 
-        // TODO: eval + processing step
+        // eval + processing step
         char *cmd = args[0];
         char **cmd_args = args;
 
-        s_execute(cmd, cmd_args);
+        if (is_builtin(cmd)) {
+            s_execute_builtin(cmd, cmd_args + 1, args_count - 1);
+        } else {
+            s_execute(cmd, cmd_args);
+        }
 
         linenoiseHistoryAdd(line);
         linenoiseFree(line);
     }
-
 
     return 0;
 }
