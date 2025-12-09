@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <string>
-#include <cstring>
+#include <string.h>
+#include <stdlib.h>
 #include <unistd.h> // Required for fork() and execv()
 #include <sys/wait.h> // Required for waitpid()
 
@@ -14,8 +14,6 @@ char PROMPT[8192];
 #define PATH_MAX 4096
 
 char CWD[PATH_MAX];
-
-using namespace std;
 
 typedef enum Builtin {
     CD,
