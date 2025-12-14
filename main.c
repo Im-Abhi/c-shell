@@ -5,10 +5,10 @@
 #include <sys/wait.h> // Required for waitpid()
 
 #include "builtin.h"
-#include "./lib/linenoise.h"
 
 char PROMPT[8192];
 
+#define BUFFER_SIZE 1024
 #define HISTORY_LENGTH 1024
 #define MAX_ARGS 64
 #define TOKEN_SEP " \t"
@@ -69,19 +69,27 @@ int s_execute(char *cmd, char ** cmd_args) {
     return status;
 }
 
+char *read_input() {
+    char *input = malloc(BUFFER_SIZE * sizeof(char));
+    if (!input) {
+        fprintf(stderr, "allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    fgets(input, BUFFER_SIZE, stdin);
+    input[strcspn(input, "\n")] = '\0';
+    return input;
+}
+
 int main(void) {
     refresh_cwd();
-
-    if(!linenoiseHistorySetMaxLen(HISTORY_LENGTH)) {
-        fprintf(stderr, "Could not set linenoise history!");
-        exit(1);
-    }
 
     char *line;
     char *args[MAX_ARGS];
 
-    while((line = linenoise(PROMPT)) != NULL) {
-
+    while(1) {
+        fprintf(stdout, "\033[1;32;40m %s $\033[0m: ", CWD);
+        line = read_input();
         // read step
         int args_count = s_read(line, args, MAX_ARGS);
 
@@ -93,7 +101,6 @@ int main(void) {
 
         // skip empty lines
         if (args_count == 0) {
-            linenoiseFree(line);
             continue;
         }
 
@@ -106,9 +113,6 @@ int main(void) {
         } else {
             s_execute(cmd, cmd_args);
         }
-
-        linenoiseHistoryAdd(line);
-        linenoiseFree(line);
     }
 
     return 0;
