@@ -9,6 +9,11 @@ extern char CWD[4096];
 
 void Builtin_impl_cd(char **args, size_t n_args) {
     char *new_dir = *args;
+    if (args[1] == NULL) {
+        fprintf(stderr, "expected argument to \"cd\"\n");
+        return;
+    }
+
     if (chdir(new_dir) != 0) {
         fprintf(stderr, "Could not change directory to '%s'\n", new_dir);
         return; // Do NOT exit the whole shell!
