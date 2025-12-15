@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h> // Required for fork() and execv()
-#include <sys/wait.h> // Required for waitpid()
+#include <unistd.h>     // Required for fork() and execv()
+#include <sys/wait.h>   // Required for waitpid()
+#include <fcntl.h>      // Required for open()
 
 #include "builtin.h"
 
@@ -15,6 +16,8 @@ char PROMPT[8192];
 #define PATH_MAX 4096
 
 char CWD[PATH_MAX];
+
+void handle_redirection(char **args);
 
 void refresh_prompt(void) {
     snprintf(PROMPT, sizeof(PROMPT),
@@ -43,6 +46,7 @@ int s_read(char *input, char **args, int max_args) {
     return i;
 }
 
+// main function which executes the command forks a new process and uses exec
 int s_execute(char *cmd, char ** cmd_args) {
     fprintf(stdout, "Executing '%s'!\n", cmd);
 
@@ -58,6 +62,7 @@ int s_execute(char *cmd, char ** cmd_args) {
 
     if (pid == 0) {
         // child
+        handle_redirection(cmd_args + 1);
         execvp(cmd, cmd_args);
     } else {
         // parent wait for child
@@ -69,6 +74,7 @@ int s_execute(char *cmd, char ** cmd_args) {
     return status;
 }
 
+// read the command from the shell
 char *read_input() {
     char *input = malloc(BUFFER_SIZE * sizeof(char));
     if (!input) {
@@ -81,16 +87,35 @@ char *read_input() {
     return input;
 }
 
+void handle_redirection(char **args) {
+    for(int i = 0; args[i] != NULL; i++) {
+        if (strcmp(args[i], ">") == 0) {
+            int fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                perror("unable to open file");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            args[i] = NULL;
+        } else if (strcmp(args[i], "<") == 0) {
+            // handling for input redirection
+        }
+    }
+}
+
 int main(void) {
     refresh_cwd();
 
     char *line;
     char *args[MAX_ARGS];
 
+    
     while(1) {
         fprintf(stdout, "\033[1;32;40m %s $\033[0m: ", CWD);
-        line = read_input();
+
         // read step
+        line = read_input();
         int args_count = s_read(line, args, MAX_ARGS);
 
         fprintf(stdout, "Read %d args\n", args_count);
