@@ -9,7 +9,7 @@ extern char CWD[4096];
 
 void Builtin_impl_cd(char **args, size_t n_args) {
     char *new_dir = *args;
-    if (args[1] == NULL) {
+    if (args[0] == NULL) {
         fprintf(stderr, "expected argument to \"cd\"\n");
         return;
     }

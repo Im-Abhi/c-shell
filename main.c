@@ -7,6 +7,7 @@
 #include <signal.h>     // Required for signals & SIGINT
 
 #include "builtin.h"
+#include "global.h"
 
 char PROMPT[8192];
 
@@ -16,6 +17,8 @@ char PROMPT[8192];
 #define TOKEN_SEP " \t"
 #define PATH_MAX 4096
 
+#define PROMPT_STR "\033[1;32m%s@\033[1;34m%s\033[0m$ "
+
 char CWD[PATH_MAX];
 
 void handle_redirection(char **args);
@@ -23,23 +26,9 @@ int check_background(char **args);
 
 void handle_signal(int sig) {
     if (sig == SIGINT) {
-        fprintf(stdout, "\n\033[1;32;40m %s $\033[0m: ", CWD);
+        fprintf(stdout, "\n\033[1;32m%s@\033[1;34m%s\033[0m$ ", getenv("USER"), CWD);
         fflush(stdout);
     }
-}
-
-void refresh_prompt(void) {
-    snprintf(PROMPT, sizeof(PROMPT),
-             "\033[32m%s\033[0m$ ", CWD);
-}
-
-void refresh_cwd(void) {
-    if (getcwd(CWD, sizeof(CWD)) == NULL) {
-        fprintf(stderr,"Error: could not read working directory");
-        exit(1);
-    }
-
-    refresh_prompt();
 }
 
 // tokenization method from glibc
@@ -142,7 +131,7 @@ int main(void) {
 
     
     while(1) {
-        fprintf(stdout, "\033[1;32;40m %s $\033[0m: ", CWD);
+        fprintf(stdout, PROMPT_STR, getenv("USER"), CWD);
 
         // read step
         line = read_input();
@@ -165,6 +154,7 @@ int main(void) {
 
         if (is_builtin(cmd)) {
             s_execute_builtin(cmd, cmd_args + 1, args_count - 1);
+            refresh_cwd();
         } else {
             s_execute(cmd, cmd_args);
         }
