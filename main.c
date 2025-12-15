@@ -4,6 +4,7 @@
 #include <unistd.h>     // Required for fork() and execv()
 #include <sys/wait.h>   // Required for waitpid()
 #include <fcntl.h>      // Required for open()
+#include <signal.h>     // Required for signals & SIGINT
 
 #include "builtin.h"
 
@@ -19,6 +20,13 @@ char CWD[PATH_MAX];
 
 void handle_redirection(char **args);
 int check_background(char **args);
+
+void handle_signal(int sig) {
+    if (sig == SIGINT) {
+        fprintf(stdout, "\n\033[1;32;40m %s $\033[0m: ", CWD);
+        fflush(stdout);
+    }
+}
 
 void refresh_prompt(void) {
     snprintf(PROMPT, sizeof(PROMPT),
@@ -126,6 +134,8 @@ int check_background(char **args) {
 
 int main(void) {
     refresh_cwd();
+
+    signal(SIGINT, handle_signal);
 
     char *line;
     char *args[MAX_ARGS];
