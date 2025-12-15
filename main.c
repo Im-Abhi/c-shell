@@ -18,6 +18,7 @@ char PROMPT[8192];
 char CWD[PATH_MAX];
 
 void handle_redirection(char **args);
+int check_background(char **args);
 
 void refresh_prompt(void) {
     snprintf(PROMPT, sizeof(PROMPT),
@@ -47,12 +48,13 @@ int s_read(char *input, char **args, int max_args) {
 }
 
 // main function which executes the command forks a new process and uses exec
-int s_execute(char *cmd, char ** cmd_args) {
+int s_execute(char *cmd, char **cmd_args) {
     fprintf(stdout, "Executing '%s'!\n", cmd);
 
     int status;
     pid_t pid;
 
+    int is_background_process = check_background(cmd_args);
     pid = fork();
 
     if (pid < 0) {
@@ -62,14 +64,18 @@ int s_execute(char *cmd, char ** cmd_args) {
 
     if (pid == 0) {
         // child
-        handle_redirection(cmd_args + 1);
+        handle_redirection(cmd_args);
         execvp(cmd, cmd_args);
     } else {
         // parent wait for child
-        if (waitpid (pid, &status, 0) != pid) {
-            fprintf(stderr, "Could not wait for child!\n");
-            return -1;
+
+        if (!is_background_process) {
+            if (waitpid (pid, &status, 0) != pid) {
+                fprintf(stderr, "Could not wait for child!\n");
+                return -1;
+            }
         }
+
     }
     return status;
 }
@@ -102,6 +108,20 @@ void handle_redirection(char **args) {
             // handling for input redirection
         }
     }
+}
+
+int check_background(char **args) {
+    int i = 0;
+    while(args[i] != NULL) {
+        i++;
+    }
+
+    if (i > 0 && strcmp(args[i - 1], "&") == 0) {
+        args[i - 1] = NULL;
+        return 1;
+    }
+
+    return 0;
 }
 
 int main(void) {
