@@ -5,5 +5,5 @@ It supports executing external programs, managing processes, handling I/O redire
 
 ### Compile with
 ```bash
-gcc main.c builtin.c -o a
+gcc main.c builtin.c global.c -o a
 ```
