@@ -31,18 +31,58 @@ void handle_signal(int sig) {
     }
 }
 
-// tokenization method from glibc
-int s_read(char *input, char **args, int max_args) {
-    int i = 0;
-    char *token = strtok(input, TOKEN_SEP);
-    while (token != NULL && i < (max_args - 1)) {
-        args[i++] = token;
-        token = strtok(NULL, TOKEN_SEP);
+// input command tokenisation
+int s_read(char *input, char **args, int max_args)
+{
+    int argc = 0;
+    char *p = input;
+
+    while (*p && argc < max_args - 1) {
+
+        // 1. Skip leading whitespace
+        while (*p == ' ' || *p == '\t') p++;
+
+        if (*p == '\0')
+            break;
+
+        char *start;
+        int in_quote = 0;
+        char quote_char = 0;
+
+        // 2. Check for quoted argument
+        if (*p == '"' || *p == '\'') {
+            in_quote = 1;
+            quote_char = *p;
+            start = ++p;   // skip opening quote
+        } else {
+            start = p;
+        }
+
+        // 3. Scan until end of argument
+        while (*p) {
+            if (in_quote) {
+                if (*p == quote_char) {
+                    *p = '\0';
+                    p++;
+                    break;
+                }
+            } else {
+                if (*p == ' ' || *p == '\t') {
+                    *p = '\0';
+                    p++;
+                    break;
+                }
+            }
+            p++;
+        }
+
+        args[argc++] = start;
     }
 
-    args[i] = NULL;
-    return i;
+    args[argc] = NULL;
+    return argc;
 }
+
 
 // main function which executes the command forks a new process and uses exec
 int s_execute(char *cmd, char **cmd_args) {
