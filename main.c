@@ -9,21 +9,21 @@
 #include "builtin.h"
 #include "global.h"
 
-char PROMPT[8192];
-
 #define BUFFER_SIZE 1024
 #define HISTORY_LENGTH 1024
-#define MAX_ARGS 64
-#define TOKEN_SEP " \t"
 #define PATH_MAX 4096
+#define MAX_ARGS 64
 
+#define TOKEN_SEP " \t"
 #define PROMPT_STR "\033[1;32m%s@\033[1;34m%s\033[0m$ "
 
+char PROMPT[8192];
 char CWD[PATH_MAX];
 
 void handle_redirection(char **args);
 int check_background(char **args);
 
+// function to handle SIGINT singla (ctrl + c)
 void handle_signal(int sig) {
     if (sig == SIGINT) {
         fprintf(stdout, "\n\033[1;32m%s@\033[1;34m%s\033[0m$ ", getenv("USER"), CWD);
@@ -85,7 +85,12 @@ char *read_input() {
         exit(EXIT_FAILURE);
     }
 
-    fgets(input, BUFFER_SIZE, stdin);
+    if (!fgets(input, BUFFER_SIZE, stdin)) {
+        free(input);        // cleanup on failure
+        return NULL;
+    }
+
+    // reject the newline character and return the length and at last put null char
     input[strcspn(input, "\n")] = '\0';
     return input;
 }
@@ -95,7 +100,7 @@ void handle_redirection(char **args) {
         if (strcmp(args[i], ">") == 0) {
             int fd = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd < 0) {
-                perror("unable to open file");
+                fprintf(stderr, "Unable to open the required file\n");
                 exit(EXIT_FAILURE);
             }
             dup2(fd, STDOUT_FILENO);
@@ -103,6 +108,14 @@ void handle_redirection(char **args) {
             args[i] = NULL;
         } else if (strcmp(args[i], "<") == 0) {
             // handling for input redirection
+            int fd = open(args[i + 1], O_RDONLY);
+            if (fd < 0) {
+                fprintf(stderr, "Unable to open the required file\n");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+            args[i] = NULL;
         }
     }
 }
@@ -135,6 +148,12 @@ int main(void) {
 
         // read step
         line = read_input();
+
+        if (line == NULL) {
+            fprintf(stderr, "Invalid/ mallformed command, Please try again\n");
+            continue;
+        }
+
         int args_count = s_read(line, args, MAX_ARGS);
 
         fprintf(stdout, "Read %d args\n", args_count);
@@ -158,6 +177,8 @@ int main(void) {
         } else {
             s_execute(cmd, cmd_args);
         }
+
+        free(line);
     }
 
     return 0;
