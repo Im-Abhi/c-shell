@@ -31,8 +31,8 @@ void handle_signal(int sig) {
     }
 }
 
-// input command tokenisation
-int s_read(char *input, char **args, int max_args)
+// input command tokenisation it modifies the input command and breaks into agrugments
+int s_read(char *input, char **args, int max_args, int *has_pipe)
 {
     int argc = 0;
     char *p = input;
@@ -77,12 +77,14 @@ int s_read(char *input, char **args, int max_args)
         }
 
         args[argc++] = start;
+        if (strcmp(start, "|") == 0) {
+            *has_pipe = argc - 1;
+        }
     }
 
     args[argc] = NULL;
     return argc;
 }
-
 
 // main function which executes the command forks a new process and uses exec
 int s_execute(char *cmd, char **cmd_args) {
@@ -135,6 +137,7 @@ char *read_input() {
     return input;
 }
 
+// function to i/o redirection (>, <)
 void handle_redirection(char **args) {
     for(int i = 0; args[i] != NULL; i++) {
         if (strcmp(args[i], ">") == 0) {
@@ -160,6 +163,7 @@ void handle_redirection(char **args) {
     }
 }
 
+// function to check '&' presense in the command 
 int check_background(char **args) {
     int i = 0;
     while(args[i] != NULL) {
@@ -170,6 +174,74 @@ int check_background(char **args) {
         args[i - 1] = NULL;
         return 1;
     }
+
+    return 0;
+}
+
+// function to split the pipeline command into two
+void split_pipe(char **args, int pipe_index, char ***left, char ***right)
+{
+    if (pipe_index == 0 || args[pipe_index + 1] == NULL) {
+        fprintf(stderr, "Invalid pipeline\n");
+        return;
+    }
+
+    args[pipe_index] = NULL;
+
+    *left  = args;
+    *right = &args[pipe_index + 1];
+}
+
+// separate function to execute the pipeline command
+int execute_pipeline(char **cmd1, char **cmd2) {
+    int status1, status2;
+    pid_t pid1, pid2;
+
+    int fd[2];
+
+    if (pipe(fd) < 0) {
+        fprintf(stderr, "Internal Error Please try again!");
+        return -1;
+    } 
+
+    pid1 = fork();
+    
+    if (pid1 < 0) {
+        fprintf(stderr, "Could not execute!\n");
+        return -1;
+    }
+
+    if (pid1 == 0) {
+        // first child process
+        dup2(fd[1], STDOUT_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        execvp(cmd1[0], cmd1);
+        fprintf(stderr, "Failure");
+        return -1;
+    }
+
+    pid2 = fork();
+
+    if (pid2 < 0) {
+        fprintf(stderr, "Could not execute!\n");
+        return -1;
+    }
+
+    if (pid2 == 0) {
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[1]);
+        close(fd[0]);
+        execvp(cmd2[0], cmd2);
+        fprintf(stderr, "Failure");
+        return -1;
+    }
+
+    close(fd[0]);
+    close(fd[1]);
+
+    status1 = waitpid(pid1, NULL, 0);
+    status2 = waitpid(pid2, NULL, 0);
 
     return 0;
 }
@@ -188,34 +260,50 @@ int main(void) {
 
         // read step
         line = read_input();
-
+        
         if (line == NULL) {
             fprintf(stderr, "Invalid/ mallformed command, Please try again\n");
             continue;
         }
+        
+        int pipe_index = -1;
 
-        int args_count = s_read(line, args, MAX_ARGS);
-
+        int args_count = s_read(line, args, MAX_ARGS, &pipe_index);
+        // fprintf(stdout, "%s\n", line);
+        
         fprintf(stdout, "Read %d args\n", args_count);
-
+        
         for(int i = 0; i < args_count; i++) {
             fprintf(stdout, "arg[%d]: %s\n", i, args[i]);
         }
-
+        
         // skip empty lines
         if (args_count == 0) {
             continue;
         }
-
+        
         // eval + processing step
         char *cmd = args[0];
         char **cmd_args = args;
 
-        if (is_builtin(cmd)) {
-            s_execute_builtin(cmd, cmd_args + 1, args_count - 1);
-            refresh_cwd();
+        if (pipe_index != -1) {
+            // pipeline flow need to fork two childs and all commands now run as external commands
+            char **cmd1, **cmd2;
+            split_pipe(args, pipe_index, &cmd1, &cmd2);
+            // cmd1 and cmd2 are string arrays with command and arguments both
+            int status = execute_pipeline(cmd1, cmd2);
+            if (status == -1) {
+                fprintf(stderr, "System failure exiting");
+                exit(1);
+            }
         } else {
-            s_execute(cmd, cmd_args);
+            // normal execution flow execution remains same
+            if (is_builtin(cmd)) {
+                s_execute_builtin(cmd, cmd_args + 1, args_count - 1);
+                refresh_cwd();
+            } else {
+                s_execute(cmd, cmd_args);
+            }   
         }
 
         free(line);
